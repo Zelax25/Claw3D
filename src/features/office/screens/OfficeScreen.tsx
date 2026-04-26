@@ -170,6 +170,8 @@ import {
   SOUNDCLAW_PLAYBACK_STARTED_EVENT_NAME,
   useJukeboxStore,
 } from "@/features/spotify-jukebox/store";
+import confetti from "canvas-confetti";
+import { useOfficeExternalEvents } from "@/features/office/hooks/useOfficeExternalEvents";
 import { useOfficeSkillTriggers } from "@/features/office/hooks/useOfficeSkillTriggers";
 import { useRemoteOfficePresence } from "@/features/office/hooks/useRemoteOfficePresence";
 import { useRemoteOfficeLayout } from "@/features/office/hooks/useRemoteOfficeLayout";
@@ -3133,6 +3135,10 @@ export function OfficeScreen({
     gatewayUrl,
     agents: standupAgentSnapshots,
   });
+  const {
+    events: externalOfficeEvents,
+    feedEvents: externalOfficeFeedEvents,
+  } = useOfficeExternalEvents();
   const taskBoard = useTaskBoardController({
     gatewayUrl,
     settingsCoordinator,
