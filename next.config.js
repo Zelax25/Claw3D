@@ -1,10 +1,6 @@
 /** @type {import('next').NextConfig} */
 const path = require("node:path");
 
-// Sub-path base for embedded deployments (e.g. /office when served under
-// turing.zelaxholdings.com/office). Set CLAW3D_BASE_PATH="" to serve at root.
-const basePath = process.env.CLAW3D_BASE_PATH ?? "/office";
-
 const securityHeaders = [
   {
     key: "Content-Security-Policy",
@@ -12,7 +8,8 @@ const securityHeaders = [
       "default-src 'self'",
       "base-uri 'self'",
       "form-action 'self'",
-      "frame-ancestors 'self'",
+      // Allow embedding from hermes-webui (same org, different subdomain).
+      "frame-ancestors 'self' https://turing.zelaxholdings.com",
       "img-src 'self' data: blob: http: https:",
       "font-src 'self' data: https:",
       "style-src 'self' 'unsafe-inline' https:",
@@ -39,10 +36,8 @@ const securityHeaders = [
     key: "X-Content-Type-Options",
     value: "nosniff",
   },
-  {
-    key: "X-Frame-Options",
-    value: "SAMEORIGIN",
-  },
+  // X-Frame-Options is superseded by frame-ancestors in CSP above; omitted to
+  // avoid conflicting with the broader frame-ancestors allow-list.
   {
     key: "Permissions-Policy",
     value: "camera=(), microphone=(self), geolocation=(), browsing-topics=()",
@@ -62,7 +57,6 @@ if (process.env.NODE_ENV === "production") {
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  ...(basePath ? { basePath, assetPrefix: basePath } : {}),
   turbopack: {
     root: path.resolve(__dirname),
   },
