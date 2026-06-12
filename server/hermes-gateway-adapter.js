@@ -58,6 +58,11 @@ loadRuntimeEnv();
 
 const HERMES_API_URL = (process.env.HERMES_API_URL || "http://localhost:8642").replace(/\/$/, "");
 const HERMES_API_KEY = process.env.HERMES_API_KEY || "";
+// Hermes agent-file service (live per-persona SOUL.md read/write + Gitea history).
+// When unset, agents.files falls back to the in-memory Map + registry-generated
+// content (so the adapter still works standalone).
+const HERMES_FILES_URL = (process.env.HERMES_FILES_URL || "").replace(/\/$/, "");
+const HERMES_FILES_TOKEN = process.env.HERMES_FILES_TOKEN || "";
 const ADAPTER_PORT = parseInt(process.env.HERMES_ADAPTER_PORT || "18789", 10);
 const HERMES_MODEL = process.env.HERMES_MODEL || "hermes";
 const HERMES_AGENT_NAME = process.env.HERMES_AGENT_NAME || "Hermes";
@@ -375,6 +380,39 @@ function hermesGet(path) {
       resolve
     );
     req.on("error", reject);
+    req.end();
+  });
+}
+
+// Hermes agent-file service client. Returns the parsed JSON body, or null on any
+// transport/parse error so callers can fall back to generated content.
+function filesRequest(method, persona, filename, content) {
+  return new Promise((resolve) => {
+    if (!HERMES_FILES_URL) return resolve(null);
+    let url;
+    try { url = new URL(`${HERMES_FILES_URL}/files/${encodeURIComponent(persona)}/${encodeURIComponent(filename)}`); }
+    catch { return resolve(null); }
+    const transport = url.protocol === "https:" ? https : http;
+    const bodyStr = method === "PUT" ? JSON.stringify({ content: content || "" }) : null;
+    const headers = {};
+    if (HERMES_FILES_TOKEN) headers["Authorization"] = `Bearer ${HERMES_FILES_TOKEN}`;
+    if (bodyStr) { headers["Content-Type"] = "application/json"; headers["Content-Length"] = Buffer.byteLength(bodyStr); }
+    const req = transport.request(
+      { hostname: url.hostname, port: url.port ? parseInt(url.port, 10) : (url.protocol === "https:" ? 443 : 80),
+        path: url.pathname, method, headers, timeout: 8000 },
+      (res) => {
+        const chunks = [];
+        res.on("data", (c) => chunks.push(Buffer.from(c)));
+        res.on("end", () => {
+          if (res.statusCode < 200 || res.statusCode >= 300) return resolve(null);
+          try { resolve(JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}")); }
+          catch { resolve(null); }
+        });
+      }
+    );
+    req.on("error", () => resolve(null));
+    req.on("timeout", () => { req.destroy(); resolve(null); });
+    if (bodyStr) req.write(bodyStr);
     req.end();
   });
 }
@@ -915,7 +953,15 @@ async function handleMethod(method, params, id, sendEvent) {
       const fileName = typeof p.name === "string" ? p.name : "";
       const memKey = `${agentId}/${fileName}`;
 
-      // Prefer explicitly saved content
+      // 1. Live files-service — the persistent source of truth (SOUL.md on the
+      //    Hermes VM; IDENTITY/USER sidecars). Falls through when unset/down or
+      //    when the file hasn't been written yet (exists:false -> show defaults).
+      const live = await filesRequest("GET", agentId, fileName);
+      if (live && live.exists === true && typeof live.content === "string") {
+        return resOk(id, { file: { content: live.content } });
+      }
+
+      // 2. Explicitly saved in-session content (cache / fallback if service down)
       if (agentFiles.has(memKey)) {
         return resOk(id, { file: { content: agentFiles.get(memKey) } });
       }
@@ -1012,9 +1058,16 @@ async function handleMethod(method, params, id, sendEvent) {
     }
 
     case "agents.files.set": {
-      const key = `${p.agentId || AGENT_ID}/${p.name || ""}`;
-      agentFiles.set(key, typeof p.content === "string" ? p.content : "");
-      return resOk(id, {});
+      const agentId = p.agentId || AGENT_ID;
+      const fileName = p.name || "";
+      const content = typeof p.content === "string" ? p.content : "";
+      // Cache in-session so the edit is never lost even if the service is down,
+      // then persist to the live files-service (writes SOUL.md + commits to
+      // Turing-state; IDENTITY/USER as sidecars). Best-effort: a service failure
+      // still returns ok with the in-memory copy holding the edit.
+      agentFiles.set(`${agentId}/${fileName}`, content);
+      const saved = await filesRequest("PUT", agentId, fileName, content);
+      return resOk(id, { ok: true, persisted: !!(saved && saved.ok) });
     }
 
     // --- Config -------------------------------------------------------------
