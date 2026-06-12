@@ -2,7 +2,7 @@ name: Upstream Sync Check
 
 # Runs weekly to detect new releases in the upstream repo
 # (iamlukethedev/Claw3D) and open a GitHub issue if we're behind.
-# Also detects whether our next.config.ts→.js patch is still needed.
+# Also detects whether our next.config.ts->js patch is still needed.
 
 on:
   schedule:
@@ -47,7 +47,7 @@ jobs:
           fi
 
           if [[ -z "${LATEST_TAG}" ]]; then
-            echo "Could not determine upstream latest tag — skipping"
+            echo "Could not determine upstream latest tag -- skipping"
             echo "new_version=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -80,13 +80,11 @@ jobs:
             --jq '.content' | base64 -d 2>/dev/null || echo "")"
 
           if echo "${DOCKERFILE}" | grep -q 'next\.config\.ts'; then
-            echo "Upstream Dockerfile still copies next.config.ts — our patch is STILL NEEDED"
+            echo "Upstream Dockerfile still copies next.config.ts -- patch is STILL NEEDED"
             echo "patch_still_needed=true" >> "$GITHUB_OUTPUT"
-            echo "patch_note=⚠️ Upstream Dockerfile still copies \`next.config.ts\` — our rename patch and Dockerfile fix are still required." >> "$GITHUB_OUTPUT"
           else
-            echo "Upstream Dockerfile no longer copies next.config.ts — patch may be resolved"
+            echo "Upstream Dockerfile no longer copies next.config.ts -- patch may be resolved"
             echo "patch_still_needed=false" >> "$GITHUB_OUTPUT"
-            echo "patch_note=✅ Upstream Dockerfile no longer copies \`next.config.ts\`. **Verify** whether our fork patches can be dropped before merging." >> "$GITHUB_OUTPUT"
           fi
 
       - name: Fetch upstream release notes
@@ -101,12 +99,9 @@ jobs:
           UPSTREAM="iamlukethedev/Claw3D"
           LATEST_TAG="${{ steps.upstream.outputs.latest_tag }}"
 
-          BODY="$(gh release view "${LATEST_TAG}" --repo "${UPSTREAM}" \
-            --json body --jq '.body' 2>/dev/null || echo "_No release notes._")"
-
-          # Write to a temp file to avoid shell quoting issues
-          printf '%s' "${BODY}" > /tmp/release-notes.txt
-          echo "body_file=/tmp/release-notes.txt" >> "$GITHUB_OUTPUT"
+          gh release view "${LATEST_TAG}" --repo "${UPSTREAM}" \
+            --json body --jq '.body' 2>/dev/null > /tmp/release-notes.txt \
+            || echo "_No release notes._" > /tmp/release-notes.txt
 
       - name: Check for existing open issue for this version
         id: dedup
@@ -126,14 +121,14 @@ jobs:
             "[.[] | select(.title | contains(\"${LATEST_TAG}\"))] | length")"
 
           if [[ "${EXISTING}" -gt 0 ]]; then
-            echo "Issue for ${LATEST_TAG} already exists — skipping"
+            echo "Issue for ${LATEST_TAG} already exists -- skipping"
             echo "skip=true" >> "$GITHUB_OUTPUT"
           else
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Ensure upstream-sync label exists
-        if: |
+        if: >-
           steps.upstream.outputs.new_version == 'true' &&
           steps.dedup.outputs.skip == 'false'
         env:
@@ -144,10 +139,55 @@ jobs:
             --repo "${{ github.repository }}" \
             --color "0075ca" \
             --description "Upstream release needs review and sync" \
-            2>/dev/null || true   # ignore if already exists
+            2>/dev/null || true
+
+      - name: Build issue body
+        id: body
+        if: >-
+          steps.upstream.outputs.new_version == 'true' &&
+          steps.dedup.outputs.skip == 'false'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          SYNCED_TAG="${{ steps.upstream.outputs.synced_tag }}"
+          LATEST_TAG="${{ steps.upstream.outputs.latest_tag }}"
+          PATCH_NEEDED="${{ steps.patch.outputs.patch_still_needed }}"
+          UPSTREAM="iamlukethedev/Claw3D"
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+          if [[ "${PATCH_NEEDED}" == "true" ]]; then
+            PATCH_LINE=":warning: Upstream Dockerfile still copies \`next.config.ts\` -- our rename patch and Dockerfile fix are **still required** after merging."
+          else
+            PATCH_LINE=":white_check_mark: Upstream Dockerfile no longer copies \`next.config.ts\`. **Verify** whether our fork patches can be dropped before merging."
+          fi
+
+          # Build body using printf so every line is YAML-block-safe (no multi-line
+          # bash string assignments that would break YAML block scalar indentation).
+          {
+            printf '## Upstream release: %s\n\n' "${LATEST_TAG}"
+            printf 'Upstream [%s](https://github.com/%s) has a new release.\n' "${UPSTREAM}" "${UPSTREAM}"
+            printf 'Our fork is currently synced to `%s`.\n\n' "${SYNCED_TAG}"
+            printf '%s\n\n' "${PATCH_LINE}"
+            printf '### Upstream release notes\n\n'
+            cat /tmp/release-notes.txt
+            printf '\n\n---\n\n'
+            printf '### Sync checklist\n\n'
+            printf -- '- [ ] Review upstream diff: `https://github.com/%s/compare/%s...%s`\n' \
+              "${UPSTREAM}" "${SYNCED_TAG}" "${LATEST_TAG}"
+            printf -- '- [ ] Check if Dockerfile runner stage copies `next.config.ts` or `.js` at new tag\n'
+            printf -- '- [ ] `git fetch upstream && git merge upstream/main` (or cherry-pick)\n'
+            printf -- '- [ ] Re-apply `Dockerfile` patch if still needed (copy `.js` not `.ts`)\n'
+            printf -- '- [ ] Verify `server/index.js` WS path patch still applies cleanly\n'
+            printf -- '- [ ] Verify `next.config.js` basePath/assetPrefix logic is compatible\n'
+            printf -- '- [ ] Push to `main` -- GH Actions rebuilds `ghcr.io/zelax25/claw3d:main`\n'
+            printf -- '- [ ] Update `.upstream-sync` to `%s`\n' "${LATEST_TAG}"
+            printf -- '- [ ] Open Terraform PR to pin IaC image tag if upgrading to a semver tag\n\n'
+            printf '> This issue was opened automatically by the [Upstream Sync Check](%s) workflow.\n' "${RUN_URL}"
+          } > /tmp/issue-body.md
 
       - name: Open sync issue
-        if: |
+        if: >-
           steps.upstream.outputs.new_version == 'true' &&
           steps.dedup.outputs.skip == 'false'
         env:
@@ -158,39 +198,9 @@ jobs:
 
           SYNCED_TAG="${{ steps.upstream.outputs.synced_tag }}"
           LATEST_TAG="${{ steps.upstream.outputs.latest_tag }}"
-          PATCH_NOTE="${{ steps.patch.outputs.patch_note }}"
-          UPSTREAM="iamlukethedev/Claw3D"
-          RELEASE_NOTES="$(cat /tmp/release-notes.txt)"
-
-          ISSUE_BODY="## Upstream release: ${LATEST_TAG}
-
-Upstream [\`${UPSTREAM}\`](https://github.com/${UPSTREAM}) has a new release.
-Our fork is currently synced to \`${SYNCED_TAG}\`.
-
-${PATCH_NOTE}
-
-### Upstream release notes
-
-${RELEASE_NOTES}
-
----
-
-### Sync checklist
-
-- [ ] Review upstream diff: \`https://github.com/${UPSTREAM}/compare/${SYNCED_TAG}...${LATEST_TAG}\`
-- [ ] Check if Dockerfile runner stage copies \`next.config.ts\` or \`.js\` at new tag
-- [ ] \`git fetch upstream && git merge upstream/main\` (or cherry-pick)
-- [ ] Re-apply \`Dockerfile\` patch if still needed (copy \`.js\` not \`.ts\`)
-- [ ] Verify \`server/index.js\` WS path patch still applies cleanly
-- [ ] Verify \`next.config.js\` basePath/assetPrefix logic is compatible
-- [ ] Push to \`main\` — GH Actions rebuilds \`ghcr.io/zelax25/claw3d:main\`
-- [ ] Update \`.upstream-sync\` to \`${LATEST_TAG}\`
-- [ ] Open Terraform PR to pin IaC image tag if upgrading to a semver tag
-
-> This issue was opened automatically by the [Upstream Sync Check](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) workflow."
 
           gh issue create \
             --repo "${{ github.repository }}" \
             --title "upstream: sync to ${LATEST_TAG} (currently at ${SYNCED_TAG})" \
             --label upstream-sync \
-            --body "${ISSUE_BODY}"
+            --body-file /tmp/issue-body.md
