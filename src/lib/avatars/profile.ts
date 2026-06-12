@@ -188,7 +188,7 @@ export const createAgentAvatarProfileFromSeed = (seed: string): AgentAvatarProfi
 
 const SKIN = { fair: "#f7d7c2", light: "#f4c58a", warm: "#d8a06e", tan: "#b7794e", deep: "#8a5a3b", rich: "#5d3a24" };
 const HAIR = { ink: "#151515", espresso: "#3e2723", walnut: "#6b4f3a", auburn: "#7b341e", blonde: "#d6b56c", violet: "#7c3aed", cyan: "#0891b2", pink: "#db2777" };
-const CLOTH = { graphite: "#2d3748", sky: "#7090ff", mint: "#34d399", amber: "#f59e0b", rose: "#f43f5e", violet: "#8b5cf6", cream: "#f5f5f4", slate: "#64748b" };
+const CLOTH = { graphite: "#2d3748", sky: "#7090ff", mint: "#34d399", amber: "#f59e0b", rose: "#f43f5e", violet: "#8b5cf6", cream: "#f5f5f4", slate: "#64748b", navy: "#1e3a8a" };
 const SHOE = { black: "#1a1a1a", navy: "#1e3a8a", brown: "#7c4a2d", white: "#e5e7eb" };
 
 type AvatarPreset = {
