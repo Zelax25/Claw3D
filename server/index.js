@@ -2,6 +2,8 @@ const http = require("node:http");
 const https = require("node:https");
 const next = require("next");
 
+const GATEWAY_WS_PATH = (process.env.CLAW3D_BASE_PATH ?? "/office") + "/api/gateway/ws";
+
 const { createAccessGate } = require("./access-gate");
 const { createGatewayProxy } = require("./gateway-proxy");
 const { assertPublicHostAllowed, resolveHosts } = require("./network-policy");
@@ -96,7 +98,7 @@ async function main() {
     log: (message) => console.info(message),
     logError: (message, error) => console.error(message, error),
     allowWs: (req) => {
-      if (resolvePathname(req.url) !== "/api/gateway/ws") return false;
+      if (resolvePathname(req.url) !== GATEWAY_WS_PATH) return false;
       return true;
     },
     verifyClient: (info) => accessGate.allowUpgrade(info.req),
@@ -105,7 +107,7 @@ async function main() {
   await app.prepare();
   const handleUpgrade = app.getUpgradeHandler();
   const handleServerUpgrade = (req, socket, head) => {
-    if (resolvePathname(req.url) === "/api/gateway/ws") {
+    if (resolvePathname(req.url) === GATEWAY_WS_PATH) {
       proxy.handleUpgrade(req, socket, head);
       return;
     }

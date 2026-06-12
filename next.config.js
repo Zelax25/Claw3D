@@ -1,5 +1,9 @@
-import type { NextConfig } from "next";
-import path from "node:path";
+/** @type {import('next').NextConfig} */
+const path = require("node:path");
+
+// Sub-path base for embedded deployments (e.g. /office when served under
+// turing.zelaxholdings.com/office). Set CLAW3D_BASE_PATH="" to serve at root.
+const basePath = process.env.CLAW3D_BASE_PATH ?? "/office";
 
 const securityHeaders = [
   {
@@ -56,7 +60,9 @@ if (process.env.NODE_ENV === "production") {
   });
 }
 
-const nextConfig: NextConfig = {
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  ...(basePath ? { basePath, assetPrefix: basePath } : {}),
   turbopack: {
     root: path.resolve(__dirname),
   },
@@ -70,4 +76,4 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+module.exports = nextConfig;
