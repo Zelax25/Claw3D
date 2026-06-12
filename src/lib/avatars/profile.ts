@@ -178,8 +178,87 @@ export const createAgentAvatarProfileFromSeed = (seed: string): AgentAvatarProfi
   };
 };
 
-export const createDefaultAgentAvatarProfile = (seed: string): AgentAvatarProfile =>
-  createAgentAvatarProfileFromSeed(seed);
+// ---------------------------------------------------------------------------
+// Curated Zelax Holdings team avatars
+// ---------------------------------------------------------------------------
+// Hand-matched to the generated persona portraits so each specialist renders
+// correctly the first time the office loads — no manual "Save avatar" needed.
+// Keyed by agent id (registry key). Unknown ids fall back to the seed hash.
+// Colors use the palette hex values from the *_OPTIONS tables above.
+
+const SKIN = { fair: "#f7d7c2", light: "#f4c58a", warm: "#d8a06e", tan: "#b7794e", deep: "#8a5a3b", rich: "#5d3a24" };
+const HAIR = { ink: "#151515", espresso: "#3e2723", walnut: "#6b4f3a", auburn: "#7b341e", blonde: "#d6b56c", violet: "#7c3aed", cyan: "#0891b2", pink: "#db2777" };
+const CLOTH = { graphite: "#2d3748", sky: "#7090ff", mint: "#34d399", amber: "#f59e0b", rose: "#f43f5e", violet: "#8b5cf6", cream: "#f5f5f4", slate: "#64748b" };
+const SHOE = { black: "#1a1a1a", navy: "#1e3a8a", brown: "#7c4a2d", white: "#e5e7eb" };
+
+type AvatarPreset = {
+  skinTone: string;
+  hairStyle: AgentAvatarHairStyle;
+  hairColor: string;
+  topStyle: AgentAvatarTopStyle;
+  topColor: string;
+  bottomColor: string;
+  shoesColor: string;
+  glasses: boolean;
+  headset: boolean;
+  hatStyle: AgentAvatarHatStyle;
+  backpack: boolean;
+};
+
+export const AGENT_AVATAR_PRESETS: Record<string, AvatarPreset> = {
+  // Turing — purple suit + orange tie, glasses, dark parted hair, brown skin
+  hermes:   { skinTone: SKIN.warm,  hairStyle: "parted", hairColor: HAIR.ink,      topStyle: "jacket", topColor: CLOTH.violet, bottomColor: CLOTH.graphite, shoesColor: SHOE.black, glasses: true,  headset: false, hatStyle: "none", backpack: false },
+  turing:   { skinTone: SKIN.warm,  hairStyle: "parted", hairColor: HAIR.ink,      topStyle: "jacket", topColor: CLOTH.violet, bottomColor: CLOTH.graphite, shoesColor: SHOE.black, glasses: true,  headset: false, hatStyle: "none", backpack: false },
+  // Ada — amber blouse, purple glasses + backpack, dark bun
+  ada:      { skinTone: SKIN.warm,  hairStyle: "bun",    hairColor: HAIR.ink,      topStyle: "tee",    topColor: CLOTH.amber,  bottomColor: CLOTH.graphite, shoesColor: SHOE.brown, glasses: true,  headset: false, hatStyle: "none", backpack: true  },
+  // Linus — green hoodie, short dark hair, backpack
+  linus:    { skinTone: SKIN.light, hairStyle: "short",  hairColor: HAIR.espresso, topStyle: "hoodie", topColor: CLOTH.mint,   bottomColor: CLOTH.graphite, shoesColor: SHOE.black, glasses: false, headset: false, hatStyle: "none", backpack: true  },
+  // Patrick — blue shirt, headset, glasses
+  patrick:  { skinTone: SKIN.light, hairStyle: "short",  hairColor: HAIR.espresso, topStyle: "tee",    topColor: CLOTH.sky,    bottomColor: CLOTH.graphite, shoesColor: SHOE.navy,  glasses: true,  headset: true,  hatStyle: "none", backpack: false },
+  // Phil — dark red jacket, glasses
+  phil:     { skinTone: SKIN.warm,  hairStyle: "short",  hairColor: HAIR.ink,      topStyle: "jacket", topColor: CLOTH.rose,   bottomColor: CLOTH.graphite, shoesColor: SHOE.black, glasses: true,  headset: false, hatStyle: "none", backpack: false },
+  // Grady — older, grey hair, purple top + glasses
+  grady:    { skinTone: SKIN.light, hairStyle: "parted", hairColor: HAIR.blonde,   topStyle: "tee",    topColor: CLOTH.violet, bottomColor: CLOTH.slate,    shoesColor: SHOE.brown, glasses: true,  headset: false, hatStyle: "none", backpack: false },
+  // Margaret — cream blazer, long dark hair, glasses
+  margaret: { skinTone: SKIN.warm,  hairStyle: "bun",    hairColor: HAIR.espresso, topStyle: "jacket", topColor: CLOTH.cream,  bottomColor: CLOTH.graphite, shoesColor: SHOE.brown, glasses: true,  headset: false, hatStyle: "none", backpack: false },
+  // Ross — grey vest, big glasses, brown hair
+  ross:     { skinTone: SKIN.fair,  hairStyle: "short",  hairColor: HAIR.walnut,   topStyle: "jacket", topColor: CLOTH.slate,  bottomColor: CLOTH.graphite, shoesColor: SHOE.black, glasses: true,  headset: false, hatStyle: "none", backpack: false },
+  // Kent — yellow hard hat, amber shirt (QA/construction)
+  kent:     { skinTone: SKIN.warm,  hairStyle: "short",  hairColor: HAIR.espresso, topStyle: "tee",    topColor: CLOTH.amber,  bottomColor: CLOTH.navy,     shoesColor: SHOE.brown, glasses: false, headset: false, hatStyle: "cap",  backpack: false },
+  // Norbert — grey shirt + suspenders, mustache
+  norbert:  { skinTone: SKIN.warm,  hairStyle: "short",  hairColor: HAIR.espresso, topStyle: "tee",    topColor: CLOTH.slate,  bottomColor: CLOTH.graphite, shoesColor: SHOE.brown, glasses: false, headset: false, hatStyle: "none", backpack: false },
+  // Shannon — purple hoodie + purple headset, braided hair
+  shannon:  { skinTone: SKIN.warm,  hairStyle: "bun",    hairColor: HAIR.ink,      topStyle: "hoodie", topColor: CLOTH.violet, bottomColor: CLOTH.graphite, shoesColor: SHOE.black, glasses: false, headset: true,  hatStyle: "none", backpack: false },
+  // Grace — blue top + cream apron, short brown hair
+  grace:    { skinTone: SKIN.warm,  hairStyle: "bun",    hairColor: HAIR.espresso, topStyle: "tee",    topColor: CLOTH.sky,    bottomColor: CLOTH.graphite, shoesColor: SHOE.white, glasses: false, headset: false, hatStyle: "none", backpack: false },
+};
+
+const buildPresetProfile = (seed: string, preset: AvatarPreset): AgentAvatarProfile => ({
+  version: AGENT_AVATAR_VERSION,
+  seed,
+  body: { skinTone: preset.skinTone },
+  hair: { style: preset.hairStyle, color: preset.hairColor },
+  clothing: {
+    topStyle: preset.topStyle,
+    topColor: preset.topColor,
+    bottomStyle: "pants",
+    bottomColor: preset.bottomColor,
+    shoesColor: preset.shoesColor,
+  },
+  accessories: {
+    glasses: preset.glasses,
+    headset: preset.headset,
+    hatStyle: preset.hatStyle,
+    backpack: preset.backpack,
+  },
+});
+
+export const createDefaultAgentAvatarProfile = (seed: string): AgentAvatarProfile => {
+  const key = seed.trim().toLowerCase();
+  const preset = AGENT_AVATAR_PRESETS[key];
+  if (preset) return buildPresetProfile(seed.trim(), preset);
+  return createAgentAvatarProfileFromSeed(seed);
+};
 
 export const normalizeAgentAvatarProfile = (
   value: unknown,
