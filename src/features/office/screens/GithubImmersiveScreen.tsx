@@ -55,6 +55,7 @@ export function GithubImmersiveScreen({
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [provider, setProvider] = useState<"github" | "gitea">("github");
   const [activeTab, setActiveTab] = useState<"queue" | "repo">("queue");
   const [selectedPr, setSelectedPr] = useState<GitHubPullRequestSummary | null>(
     null,
@@ -89,7 +90,9 @@ export function GithubImmersiveScreen({
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch("/api/office/github", { cache: "no-store" });
+      const response = await fetch(`/api/office/github?provider=${provider}`, {
+        cache: "no-store",
+      });
       const payload = (await response.json()) as GitHubDashboardResponse & {
         error?: string;
       };
@@ -133,7 +136,7 @@ export function GithubImmersiveScreen({
         setLoading(false);
       }
     }
-  }, []);
+  }, [provider]);
 
   useEffect(() => {
     void refreshDashboard();
@@ -152,6 +155,7 @@ export function GithubImmersiveScreen({
       setDetailLoading(true);
       try {
         const params = new URLSearchParams({
+          provider,
           repo: summary.repo,
           number: String(summary.number),
         });
@@ -186,6 +190,22 @@ export function GithubImmersiveScreen({
           setDetailLoading(false);
         }
       }
+    },
+    [provider],
+  );
+
+  const handleSelectProvider = useCallback(
+    (next: "github" | "gitea") => {
+      setProvider((current) => {
+        if (current === next) return current;
+        setSelectedPr(null);
+        setDetail(null);
+        setSelectedFilePath(null);
+        setError(null);
+        setReviewMessage(null);
+        setActiveTab("queue");
+        return next;
+      });
     },
     [],
   );
@@ -266,6 +286,7 @@ export function GithubImmersiveScreen({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
+            provider,
             repo: detail.repo,
             number: detail.number,
             action,
@@ -294,7 +315,7 @@ export function GithubImmersiveScreen({
         setReviewBusyAction(null);
       }
     },
-    [detail, loadDetail, refreshDashboard, reviewBody, selectedPr],
+    [detail, loadDetail, provider, refreshDashboard, reviewBody, selectedPr],
   );
 
   const handleSubmitInlineComment = useCallback(
@@ -311,6 +332,7 @@ export function GithubImmersiveScreen({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          provider,
           repo: input.repo,
           number: input.pullNumber,
           commitId: input.commitId,
@@ -327,7 +349,7 @@ export function GithubImmersiveScreen({
         throw new Error(message);
       }
     },
-    [],
+    [provider],
   );
 
   const shouldBlockForSkillSetup =
@@ -419,12 +441,28 @@ export function GithubImmersiveScreen({
               </div>
               <div className="text-lg font-semibold text-white">
                 {agentName
-                  ? `${agentName} is reviewing GitHub.`
-                  : "GitHub review station."}
+                  ? `${agentName} is reviewing ${provider === "gitea" ? "Gitea" : "GitHub"}.`
+                  : `${provider === "gitea" ? "Gitea" : "GitHub"} review station.`}
               </div>
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <div className="flex items-center rounded-full border border-white/10 bg-white/5 p-0.5 text-[12px]">
+              {(["github", "gitea"] as const).map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() => handleSelectProvider(option)}
+                  className={`rounded-full px-3 py-1 capitalize transition-colors ${
+                    provider === option
+                      ? "bg-cyan-300/16 text-cyan-100"
+                      : "text-white/55 hover:text-white"
+                  }`}
+                >
+                  {option === "github" ? "GitHub" : "Gitea"}
+                </button>
+              ))}
+            </div>
             <button
               type="button"
               onClick={() => {

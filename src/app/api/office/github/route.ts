@@ -8,10 +8,57 @@ import {
   type GitHubInlineCommentSide,
   type GitHubReviewAction,
 } from "@/lib/office/github";
+import {
+  loadGiteaDashboard,
+  loadGiteaPullRequestDetail,
+  submitGiteaInlineComment,
+  submitGiteaPullRequestReview,
+} from "@/lib/office/gitea";
 
 export const runtime = "nodejs";
 
+type Provider = "github" | "gitea";
+
+const resolveProvider = (value: string | null | undefined): Provider => {
+  return value === "gitea" ? "gitea" : "github";
+};
+
+// Both providers return the same response shapes; the GitHub provider is
+// synchronous (gh CLI) and Gitea is async (REST), so everything is awaited.
+const loadDashboard = (provider: Provider) =>
+  provider === "gitea" ? loadGiteaDashboard() : loadGitHubDashboard();
+
+const loadDetail = (provider: Provider, repo: string, number: number) =>
+  provider === "gitea"
+    ? loadGiteaPullRequestDetail({ repo, number })
+    : loadGitHubPullRequestDetail({ repo, number });
+
+const submitReview = (
+  provider: Provider,
+  params: { repo: string; number: number; action: GitHubReviewAction; body?: string | null },
+) =>
+  provider === "gitea"
+    ? submitGiteaPullRequestReview(params)
+    : submitGitHubPullRequestReview(params);
+
+const submitInlineComment = (
+  provider: Provider,
+  params: {
+    repo: string;
+    number: number;
+    path: string;
+    line: number;
+    side: GitHubInlineCommentSide;
+    body: string;
+    commitId?: string | null;
+  },
+) =>
+  provider === "gitea"
+    ? submitGiteaInlineComment(params)
+    : submitGitHubInlineComment(params);
+
 type ReviewRequestBody = {
+  provider?: string;
   repo?: string;
   number?: number;
   action?: GitHubReviewAction;
@@ -32,20 +79,21 @@ const parsePullRequestNumber = (value: string | null): number | null => {
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
+    const provider = resolveProvider(searchParams.get("provider"));
     const repo = (searchParams.get("repo") ?? "").trim();
     const number = parsePullRequestNumber(searchParams.get("number"));
     if (repo && number) {
-      return NextResponse.json(loadGitHubPullRequestDetail({ repo, number }), {
+      return NextResponse.json(await loadDetail(provider, repo, number), {
         headers: { "Cache-Control": "no-store" },
       });
     }
 
-    return NextResponse.json(loadGitHubDashboard(), {
+    return NextResponse.json(await loadDashboard(provider), {
       headers: { "Cache-Control": "no-store" },
     });
   } catch (error) {
     const message =
-      error instanceof Error ? error.message : "Failed to load GitHub server room data.";
+      error instanceof Error ? error.message : "Failed to load code review data.";
     return NextResponse.json({ error: message }, { status: 400 });
   }
 }
@@ -53,6 +101,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as ReviewRequestBody;
+    const provider = resolveProvider(body.provider);
     const repo = typeof body.repo === "string" ? body.repo.trim() : "";
     const number =
       typeof body.number === "number" && Number.isFinite(body.number)
@@ -82,7 +131,7 @@ export async function POST(request: Request) {
         );
       }
 
-      const result = submitGitHubPullRequestReview({
+      const result = await submitReview(provider, {
         repo,
         number,
         action,
@@ -100,7 +149,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const result = submitGitHubInlineComment({
+    const result = await submitInlineComment(provider, {
       repo,
       number,
       path,
@@ -114,7 +163,7 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     const message =
-      error instanceof Error ? error.message : "Failed to submit GitHub review.";
+      error instanceof Error ? error.message : "Failed to submit code review.";
     return NextResponse.json({ error: message }, { status: 400 });
   }
 }

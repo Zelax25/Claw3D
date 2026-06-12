@@ -21,6 +21,21 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
+# Code Review Room needs the GitHub CLI (gh) for the GitHub provider and git for
+# remote-slug resolution. The Gitea provider is pure fetch() and needs neither.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates curl gnupg git \
+  && mkdir -p -m 755 /etc/apt/keyrings \
+  && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+       -o /etc/apt/keyrings/githubcli-archive-keyring.gpg \
+  && chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
+  && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+       > /etc/apt/sources.list.d/github-cli.list \
+  && apt-get update \
+  && apt-get install -y --no-install-recommends gh \
+  && apt-get purge -y --auto-remove gnupg \
+  && rm -rf /var/lib/apt/lists/*
+
 # Copy built app + custom server + production node_modules only.
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
