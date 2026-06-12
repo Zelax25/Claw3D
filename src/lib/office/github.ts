@@ -120,12 +120,17 @@ const extractCommandMessage = (stderr: string, stdout: string, fallback: string)
   return fallback;
 };
 
-const runCommand = (command: string, args: string[], options?: { input?: string; maxBuffer?: number }) => {
+const runCommand = (
+  command: string,
+  args: string[],
+  options?: { input?: string; maxBuffer?: number; env?: NodeJS.ProcessEnv },
+) => {
   const result = childProcess.spawnSync(command, args, {
     cwd: process.cwd(),
     encoding: "utf8",
     input: options?.input,
     maxBuffer: options?.maxBuffer ?? DEFAULT_MAX_BUFFER,
+    ...(options?.env ? { env: options.env } : {}),
   });
   if (result.error) {
     throw result.error;
@@ -540,7 +545,17 @@ export const submitGitHubPullRequestReview = (params: {
     args.push("--body", body);
   }
 
-  const result = runCommand("gh", args, { maxBuffer: DEFAULT_MAX_BUFFER });
+  // Approvals run under the dedicated approver identity (GH_APPROVER_TOKEN,
+  // e.g. Zelax25) so Alex can approve agent-authored PRs from the office —
+  // GitHub forbids approving your own PR and the default token is Turing's.
+  // Comments / request-changes stay on the default (Turing) token.
+  const approverToken =
+    params.action === "APPROVE" ? (process.env.GH_APPROVER_TOKEN ?? "").trim() : "";
+  const commandEnv = approverToken
+    ? { ...process.env, GH_TOKEN: approverToken, GITHUB_TOKEN: approverToken }
+    : undefined;
+
+  const result = runCommand("gh", args, { maxBuffer: DEFAULT_MAX_BUFFER, env: commandEnv });
   if (result.status !== 0) {
     throw new Error(
       extractCommandMessage(
