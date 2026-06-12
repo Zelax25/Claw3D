@@ -2322,6 +2322,7 @@ export function RetroOffice3D({
   onTextMessageComplete,
   onQaLabDismiss,
   onOpenGithubSkillSetup,
+  onImmersiveOverlayActiveChange,
   onJukeboxInteract,
   onKanbanInteract,
   taskBoardAgents = [],
@@ -2442,6 +2443,9 @@ export function RetroOffice3D({
   onTextMessageComplete?: (agentId: string) => void;
   onQaLabDismiss?: () => void;
   onOpenGithubSkillSetup?: () => void;
+  /** Fires when an immersive room overlay opens/closes, so the parent can hide
+   *  floating chrome (e.g. the building directory) that would cover it. */
+  onImmersiveOverlayActiveChange?: (active: boolean) => void;
   onJukeboxInteract?: () => void;
   onKanbanInteract?: () => void;
   taskBoardAgents?: AgentState[];
@@ -3090,6 +3094,9 @@ export function RetroOffice3D({
     qaImmersive ||
     standupImmersive ||
     kanbanImmersive;
+  useEffect(() => {
+    onImmersiveOverlayActiveChange?.(immersiveOverlayActive);
+  }, [immersiveOverlayActive, onImmersiveOverlayActiveChange]);
   const compactRosterAgents = useMemo(
     () => agents.slice(0, COMPACT_AGENT_BADGE_LIMIT),
     [agents],

@@ -997,6 +997,9 @@ export function OfficeScreen({
     useAgentStore();
   const [agentsLoaded, setAgentsLoaded] = useState(false);
   const [didAttemptGatewayConnect, setDidAttemptGatewayConnect] = useState(false);
+  // True while an immersive room overlay (GitHub review, kanban, etc.) is open —
+  // used to hide the floating building directory so it doesn't cover the room.
+  const [immersiveOverlayActive, setImmersiveOverlayActive] = useState(false);
   const [showDelayedGatewayLoadingOverlay, setShowDelayedGatewayLoadingOverlay] =
     useState(false);
   const [showDelayedGatewayConnectOverlay, setShowDelayedGatewayConnectOverlay] =
@@ -4748,14 +4751,16 @@ export function OfficeScreen({
           </div>
         </div>
       ) : null}
-      <OfficeFloorNav
-        activeFloorId={activeFloor.id}
-        floorRosterCache={floorRosterCache}
-        onSelectFloor={(floorId) => {
-          void handleSelectFloor(floorId);
-        }}
-        activeAdapterType={(selectedAdapterType as FloorProvider) ?? null}
-      />
+      {!immersiveOverlayActive ? (
+        <OfficeFloorNav
+          activeFloorId={activeFloor.id}
+          floorRosterCache={floorRosterCache}
+          onSelectFloor={(floorId) => {
+            void handleSelectFloor(floorId);
+          }}
+          activeAdapterType={(selectedAdapterType as FloorProvider) ?? null}
+        />
+      ) : null}
       <section className="relative h-full min-h-0 min-w-0 overflow-hidden">
         <RetroOffice3D
           key={activeFloor.id}
@@ -4774,6 +4779,7 @@ export function OfficeScreen({
           monitorAgentId={monitorAgentId}
           monitorByAgentId={monitorByAgentId}
           githubSkill={githubSkill}
+          onImmersiveOverlayActiveChange={setImmersiveOverlayActive}
           taskManagerEnabled={taskManagerReady}
           soundclawEnabled={soundclawReady}
           officeTitle={officeTitle}
