@@ -37,6 +37,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # GHCR requires all-lowercase image names; github.repository_owner
+          # may be mixed-case (e.g. "Zelax25").
+          IMAGE_NAME="$(printf '%s' "${IMAGE_NAME}" | tr '[:upper:]' '[:lower:]')"
           tags=()
           ref_name="$(printf '%s' "${GITHUB_REF_NAME}" | tr '[:upper:]' '[:lower:]' | tr '/_' '-' | tr -cd 'a-z0-9.-')"
           if [[ "${GITHUB_REF}" == "refs/heads/main" ]]; then
