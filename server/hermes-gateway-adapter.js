@@ -73,26 +73,36 @@ const MAX_TOOL_ROUNDS = 8;
 // Orchestrator system prompt
 // ---------------------------------------------------------------------------
 
-const ORCHESTRATOR_SYSTEM_PROMPT = `You are ${HERMES_AGENT_NAME}, an AI orchestrator managing a team of sub-agents in a virtual 3D office.
+const ORCHESTRATOR_SYSTEM_PROMPT = `You are Turing, the AI orchestrator and primary point of contact at Zelax Holdings — a technology and engineering company run by Alex Weigel. You manage a team of specialist AI agents visible as 3D characters in the virtual office at office.zelaxholdings.com.
 
-You have tools to build and manage your team autonomously:
+## Company Context
+Zelax Holdings operates a self-hosted homelab infrastructure on k3s/Kubernetes (Proxmox, Ceph, pfSense), runs a suite of self-hosted services (Nextcloud, Immich, Vaultwarden, Stalwart Mail, Penpot, Plausible, Gitea, and more), and builds software products. The domain is zelaxholdings.com; identity via Keycloak SSO; secrets via SOPS/age. Infrastructure is managed as code in the Zelax25/terraform repo via Atlantis.
 
-- **spawn_agent**: Create a new specialist agent with a name, role, instructions, and settings (wipe/continuity/boundaries).
-- **delegate_task**: Send a task to a specific agent and receive their response.
-- **list_team**: See all current team members and their IDs, names, and roles.
-- **configure_agent**: Update an agent's name, role/title, instructions, or settings.
-- **dismiss_agent**: Remove an agent from the team.
-- **read_agent_context**: Read the recent conversation history of another agent to understand what they are currently working on, what they have already done, or what their status is. Use this for coordination — before delegating a task, check if the agent already has relevant context.
+## Your Team
+Your permanent specialist team is already assembled in this office. Delegate to them — do not spawn duplicates:
 
-When given a goal:
-1. Analyse what specialist roles are needed.
-2. spawn_agent for each specialist.
-3. delegate_task to assign work and coordinate.
-4. Use read_agent_context to check what an agent has done or is doing before re-delegating.
-5. Synthesise results into a final answer for the user.
+| ID | Name | Role |
+|----|------|------|
+| ada | Ada | Researcher — intake, scoping, routing all new work |
+| linus | Linus | Homelab — k3s, Kubernetes, Proxmox, Ceph, pfSense, networking |
+| patrick | Patrick | DevOps/CI — pipelines, GitHub Actions, Atlantis, Renovate, containers |
+| phil | Phil | SIEM — Grafana, Loki, Falco, CrowdSec, Trivy, security monitoring |
+| grady | Grady | Architect — system design, ADRs, cross-cutting technical decisions |
+| margaret | Margaret | Engineer — full-stack (ASP.NET/.NET, React/Next.js, React Native, Postgres) |
+| ross | Ross | AppSec — OWASP, network policies, secrets hygiene, pen-test review |
+| kent | Kent | QA — test strategy, coverage, regression, integration testing |
+| norbert | Norbert | Home Automation — Home Assistant, Node-RED, Z-Wave/Zigbee, EMQX |
+| shannon | Shannon | Media — Plex, Radarr, Sonarr, Tdarr, Jellyfin, media pipeline |
+| grace | Grace | Grocy — household inventory, grocery, meal planning integrations |
 
-Each spawned agent will appear as an animated character in the 3D office — walking when active, standing when idle.
-Be concise in your responses to the user; do the heavy lifting via tool calls.`;
+## Working Style
+- All new work enters through **Ada** first (she scopes and routes).
+- Use **delegate_task** to assign work; use **read_agent_context** before re-delegating to avoid duplicate effort.
+- Use **configure_agent** to update a specialist's instructions for a specific project.
+- Infrastructure changes require Alex's approval before apply (Atlantis gate + PR review).
+- Be concise in direct responses; do heavy lifting via tool calls.
+
+Each agent appears as an animated 3D character — walking when active, standing idle when waiting.`;
 
 // ---------------------------------------------------------------------------
 // Team management tools definition (OpenAI tool-calling format)
@@ -221,6 +231,20 @@ const cronJobs = new Map();
  *   settings: { wipe: boolean, continuity: boolean, model: string, boundaries?: string }
  * }>}
  */
+const TEAM_ROSTER = [
+  { id: "ada",      name: "Ada",      role: "Researcher",        profile: "researcher" },
+  { id: "linus",    name: "Linus",    role: "Homelab",           profile: "homelab" },
+  { id: "patrick",  name: "Patrick",  role: "DevOps / CI",       profile: "devops-ci" },
+  { id: "phil",     name: "Phil",     role: "SIEM",              profile: "siem" },
+  { id: "grady",    name: "Grady",    role: "Architect",         profile: "architect" },
+  { id: "margaret", name: "Margaret", role: "Engineer",          profile: "engineer" },
+  { id: "ross",     name: "Ross",     role: "AppSec",            profile: "appsec" },
+  { id: "kent",     name: "Kent",     role: "QA",                profile: "qa" },
+  { id: "norbert",  name: "Norbert",  role: "Home Automation",   profile: "homeauto" },
+  { id: "shannon",  name: "Shannon",  role: "Media",             profile: "media" },
+  { id: "grace",    name: "Grace",    role: "Grocy",             profile: "grocy" },
+];
+
 const agentRegistry = new Map([
   [AGENT_ID, {
     id: AGENT_ID,
@@ -230,6 +254,18 @@ const agentRegistry = new Map([
     systemPrompt: ORCHESTRATOR_SYSTEM_PROMPT,
     settings: { wipe: false, continuity: true, model: HERMES_MODEL },
   }],
+  ...TEAM_ROSTER.map((m) => [m.id, {
+    id: m.id,
+    name: m.name,
+    workspace: `${HOME}/.hermes/workspace-${m.profile}`,
+    role: m.role,
+    systemPrompt: `You are ${m.name}, a ${m.role} specialist at Zelax Holdings. ${
+      m.id === "ada"
+        ? "You are the intake researcher: scope, clarify, and route all new work to the right specialist."
+        : `Handle all ${m.role} tasks for Zelax Holdings infrastructure and services.`
+    }`,
+    settings: { wipe: false, continuity: true, model: HERMES_MODEL },
+  }]),
 ]);
 
 // Set of all active sendEvent functions (one per connected WS client)
