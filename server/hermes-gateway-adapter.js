@@ -911,9 +911,104 @@ async function handleMethod(method, params, id, sendEvent) {
     }
 
     case "agents.files.get": {
-      const key = `${p.agentId || AGENT_ID}/${p.name || ""}`;
-      const content = agentFiles.get(key);
-      return resOk(id, { file: content !== undefined ? { content } : { missing: true } });
+      const agentId = typeof p.agentId === "string" && p.agentId ? p.agentId : AGENT_ID;
+      const fileName = typeof p.name === "string" ? p.name : "";
+      const memKey = `${agentId}/${fileName}`;
+
+      // Prefer explicitly saved content
+      if (agentFiles.has(memKey)) {
+        return resOk(id, { file: { content: agentFiles.get(memKey) } });
+      }
+
+      // Generate from registry so the Agent Editor is pre-populated from Hermes data
+      const agentForFile = agentRegistry.get(agentId);
+      if (!agentForFile) return resOk(id, { file: { missing: true } });
+
+      const AGENT_VIBES = {
+        hermes:   "Strategic, collaborative, and decisive",
+        ada:      "Precise, analytical, and methodical",
+        linus:    "Calm, experienced, and technically thorough",
+        patrick:  "Systematic, automation-focused, and pragmatic",
+        phil:     "Vigilant, detail-oriented, and security-focused",
+        grady:    "Thoughtful, structured, and big-picture",
+        margaret: "Sharp, pragmatic, and full-stack capable",
+        ross:     "Security-first, risk-aware, and thorough",
+        kent:     "Methodical, skeptical, and quality-driven",
+        norbert:  "Practical, connected, and automation-savvy",
+        shannon:  "Passionate, organized, and media-fluent",
+        grace:    "Organized, practical, and household-focused",
+      };
+      const AGENT_EMOJIS = {
+        hermes: "🤖", ada: "🔍", linus: "🖥️", patrick: "⚙️",
+        phil: "🛡️", grady: "🏛️", margaret: "💻", ross: "🔒",
+        kent: "✅", norbert: "🏠", shannon: "🎬", grace: "🛒",
+      };
+      const vibe  = AGENT_VIBES[agentId]  || "Professional and focused";
+      const emoji = AGENT_EMOJIS[agentId] || "🤖";
+      const name  = agentForFile.name;
+      const role  = agentForFile.role || "Specialist";
+
+      let generatedContent = null;
+      switch (fileName) {
+        case "IDENTITY.md":
+          generatedContent = [
+            "# IDENTITY.md - Who Am I?",
+            "",
+            `- Name: ${name}`,
+            `- Creature: AI specialist`,
+            `- Vibe: ${vibe}`,
+            `- Emoji: ${emoji}`,
+            `- Avatar: `,
+            "",
+          ].join("\n");
+          break;
+        case "SOUL.md":
+          generatedContent = [
+            "# SOUL.md - Who You Are",
+            "",
+            "## Core Truths",
+            "",
+            `- You are ${name}, the ${role} at Zelax Holdings.`,
+            `- ${agentForFile.systemPrompt ? agentForFile.systemPrompt.split("\n")[0] : `Handle all ${role} tasks with care.`}`,
+            "",
+            "## Boundaries",
+            "",
+            `- Operate within your specialty: ${role}.`,
+            "- Infrastructure changes require Alex's approval before apply.",
+            "- Escalate decisions outside your domain to Turing or the appropriate specialist.",
+            "",
+            "## Vibe",
+            "",
+            vibe + ".",
+            "",
+            "## Continuity",
+            "",
+            "- Maintain context across the conversation.",
+            "- Reference prior decisions and completed work to avoid repetition.",
+            "",
+          ].join("\n");
+          break;
+        case "USER.md":
+          generatedContent = [
+            "# USER.md - About Your Human",
+            "",
+            "- Name: Alex Weigel",
+            "- What to call them: Alex",
+            "- Pronouns: he/him",
+            "- Timezone: America/Chicago",
+            "- Notes: ",
+            "",
+            "## Context",
+            "",
+            "Alex runs Zelax Holdings — a technology and engineering company with a self-hosted homelab on k3s/Kubernetes (Proxmox, Ceph, pfSense). Infrastructure is managed as code via Atlantis. He communicates via Discord or the office chat.",
+            "",
+          ].join("\n");
+          break;
+        default:
+          return resOk(id, { file: { missing: true } });
+      }
+
+      return resOk(id, { file: { content: generatedContent } });
     }
 
     case "agents.files.set": {
@@ -1122,8 +1217,31 @@ async function handleMethod(method, params, id, sendEvent) {
 
     // --- Skills & models ----------------------------------------------------
 
-    case "skills.status":
-      return resOk(id, { skills: [] });
+    case "skills.status": {
+      const agentId = typeof p.agentId === "string" ? p.agentId : AGENT_ID;
+      const agentForSkills = agentRegistry.get(agentId);
+      const workspaceDir = agentForSkills?.workspace || `${HOME}/.hermes/workspace-hermes`;
+      const managedSkillsDir = `${HOME}/.openclaw/managed-skills`;
+      const noReqs = { bins: [], anyBins: [], env: [], config: [], os: [] };
+      const BUNDLED_SKILLS = [
+        { skillKey: "task-manager", name: "Task Manager", description: "Kanban task board for tracking work items.", emoji: "📋" },
+        { skillKey: "web-search",   name: "Web Search",   description: "Search the web for up-to-date information.", emoji: "🔍" },
+        { skillKey: "memory",       name: "Memory",       description: "Persistent memory for facts and context.", emoji: "🧠" },
+        { skillKey: "code-exec",    name: "Code Execution", description: "Run code snippets in a sandboxed environment.", emoji: "⚙️" },
+      ];
+      const skills = BUNDLED_SKILLS.map((s) => ({
+        name: s.name, description: s.description,
+        source: "openclaw-bundled", bundled: true,
+        filePath: `${managedSkillsDir}/${s.skillKey}/SKILL.md`,
+        baseDir: `${managedSkillsDir}/${s.skillKey}`,
+        skillKey: s.skillKey, primaryEnv: null, emoji: s.emoji,
+        homepage: null, always: false, disabled: false,
+        blockedByAllowlist: false, eligible: true,
+        requirements: noReqs, missing: noReqs,
+        configChecks: [], install: [],
+      }));
+      return resOk(id, { workspaceDir, managedSkillsDir, skills });
+    }
 
     case "models.list":
       try {
@@ -1137,6 +1255,16 @@ async function handleMethod(method, params, id, sendEvent) {
       } catch {
         return resOk(id, { models: [{ id: HERMES_MODEL, name: HERMES_MODEL }] });
       }
+
+    case "skills.update": {
+      const skillKey = typeof p.skillKey === "string" ? p.skillKey : "";
+      return resOk(id, { ok: true, skillKey, config: {} });
+    }
+
+    case "skills.install": {
+      const name = typeof p.name === "string" ? p.name : "";
+      return resOk(id, { ok: true, message: `${name || "Skill"} is ready.`, stdout: "", stderr: "", code: 0 });
+    }
 
     case "tasks.list":
       return resOk(id, { tasks: [] });
@@ -1261,7 +1389,7 @@ function startAdapter() {
               "status","config.get","config.set","config.patch",
               "agents.files.get","agents.files.set",
               "exec.approvals.get","exec.approvals.set","exec.approval.resolve",
-              "wake","skills.status","models.list",
+              "wake","skills.status","skills.update","skills.install","models.list",
               "tasks.list",
               "cron.list","cron.add","cron.remove","cron.patch","cron.run"],
               events: ["chat","presence","heartbeat","cron"] },
