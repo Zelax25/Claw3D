@@ -65,6 +65,10 @@ const isPublicHost = (host) => {
 
 const assertPublicHostAllowed = ({ host, studioAccessToken }) => {
   if (!isPublicHost(host)) return;
+  // When running behind a trusted reverse proxy (TRUSTED_PROXY=1) the proxy
+  // handles authentication (e.g. Traefik + Keycloak ForwardAuth). Allow
+  // binding to a public host without a local studio access token.
+  if (process.env.TRUSTED_PROXY === "1") return;
 
   const token = String(studioAccessToken ?? "").trim();
   if (token) return;

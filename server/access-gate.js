@@ -83,7 +83,10 @@ function createAccessGate(options) {
   const token = String(options?.token ?? "").trim();
   const cookieName = String(options?.cookieName ?? "studio_access").trim() || "studio_access";
 
-  const enabled = Boolean(token);
+  // Disable the studio access gate when running behind a trusted reverse proxy
+  // (TRUSTED_PROXY=1). The proxy (e.g. Traefik + Keycloak ForwardAuth) handles
+  // authentication — a second cookie-based gate would just block all requests.
+  const enabled = Boolean(token) && process.env.TRUSTED_PROXY !== "1";
   const rateLimiter = createRateLimiter(10, 60_000);
 
   const getAuthState = (req) => {
