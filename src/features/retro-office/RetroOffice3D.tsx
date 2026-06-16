@@ -7163,8 +7163,10 @@ export function RetroOffice3D({
 
       {!immersiveOverlayActive ? (
         <>
-          {/* Ideas 3 + 6 + 8: Mini status bar — bottom left. */}
-          <div className="absolute bottom-3 left-3 flex flex-col items-start gap-1.5 z-10 pointer-events-none select-none">
+          {/* Ideas 3 + 6 + 8: Mini status bar — bottom left.
+             Lifted above the Agent Event Console (fixed bottom-3 left-3 z-30),
+             whose always-visible header otherwise covers the status/hint pill. */}
+          <div className="absolute bottom-14 left-3 flex flex-col items-start gap-1.5 z-10 pointer-events-none select-none">
             {/* Idea 3: Activity feed entries — newest on bottom. */}
             {statusFeedEvents
               .slice(0, 4)
