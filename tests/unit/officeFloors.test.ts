@@ -40,13 +40,11 @@ describe("office floor registry", () => {
   });
 
   it("lists only enabled floors by default", () => {
+    // This deployment runs the Hermes runtime only; the other runtime floors
+    // are disabled so the Building Directory can't cycle into an unconfigured
+    // gateway ("no gateway found").
     expect(listEnabledOfficeFloors().map((floor) => floor.id)).toEqual([
-      "lobby",
-      "openclaw-ground",
       "hermes-first",
-      "local-runtime",
-      "claw3d-runtime",
-      "custom-second",
     ]);
   });
 
@@ -76,12 +74,14 @@ describe("office floor registry", () => {
   it("resolves active floor ids against enabled floors", () => {
     expect(DEFAULT_ACTIVE_FLOOR_ID).toBe("lobby");
     expect(resolveActiveOfficeFloorId("hermes-first")).toBe("hermes-first");
-    expect(resolveActiveOfficeFloorId("training")).toBe("lobby");
-    expect(resolveActiveOfficeFloorId(null)).toBe("lobby");
+    // Disabled/unknown floors fall back to the first enabled floor (hermes-first).
+    expect(resolveActiveOfficeFloorId("training")).toBe("hermes-first");
+    expect(resolveActiveOfficeFloorId(null)).toBe("hermes-first");
   });
 
   it("cycles across enabled floors only", () => {
-    expect(getAdjacentEnabledOfficeFloorId("lobby", 1)).toBe("openclaw-ground");
-    expect(getAdjacentEnabledOfficeFloorId("lobby", -1)).toBe("custom-second");
+    // Only hermes-first is enabled, so cycling stays on it.
+    expect(getAdjacentEnabledOfficeFloorId("lobby", 1)).toBe("hermes-first");
+    expect(getAdjacentEnabledOfficeFloorId("lobby", -1)).toBe("hermes-first");
   });
 });
