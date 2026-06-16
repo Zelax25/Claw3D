@@ -52,7 +52,10 @@ export const OFFICE_FLOORS: readonly FloorDefinition[] = [
     provider: "openclaw",
     kind: "runtime",
     zone: "building",
-    enabled: true,
+    // Disabled: this deployment runs the Hermes runtime only. Enabling floors
+    // without a configured gateway makes the Building Directory cycle into a
+    // "no gateway found" error. Re-enable if an OpenClaw gateway is wired up.
+    enabled: false,
     sortOrder: 10,
     runtimeProfileId: "openclaw-default",
   },
@@ -74,7 +77,8 @@ export const OFFICE_FLOORS: readonly FloorDefinition[] = [
     provider: "local",
     kind: "runtime",
     zone: "building",
-    enabled: true,
+    // Disabled: no local runtime gateway in this deployment (see openclaw note).
+    enabled: false,
     sortOrder: 25,
     runtimeProfileId: "local-default",
   },
@@ -85,7 +89,8 @@ export const OFFICE_FLOORS: readonly FloorDefinition[] = [
     provider: "claw3d",
     kind: "runtime",
     zone: "building",
-    enabled: true,
+    // Disabled: no claw3d runtime gateway in this deployment (see openclaw note).
+    enabled: false,
     sortOrder: 28,
     runtimeProfileId: "claw3d-default",
   },
@@ -96,7 +101,8 @@ export const OFFICE_FLOORS: readonly FloorDefinition[] = [
     provider: "custom",
     kind: "runtime",
     zone: "building",
-    enabled: true,
+    // Disabled: no custom runtime gateway in this deployment (see openclaw note).
+    enabled: false,
     sortOrder: 30,
     runtimeProfileId: "custom-default",
   },
