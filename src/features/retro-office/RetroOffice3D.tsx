@@ -5873,6 +5873,15 @@ export function RetroOffice3D({
               </button>
             ))}
           </div>
+        </div>
+      ) : null}
+
+      {/* Standup + Kanban quick-access chips — top right, below the toolbar.
+          Kept out of the top-left column so they don't overlap the fixed
+          OfficeFloorNav (Building Directory / Current Floor) rail, which the
+          taller Standup card would otherwise grow down into during a meeting. */}
+      {!readOnly && !immersiveOverlayActive && (standupMeeting || kanbanBoardItem) ? (
+        <div className="absolute top-14 right-3 z-20 flex flex-col items-end gap-2">
           {standupMeeting ? (
             <button
               type="button"
