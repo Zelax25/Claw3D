@@ -1,4 +1,4 @@
-export type VoiceReplyProvider = "elevenlabs";
+export type VoiceReplyProvider = "elevenlabs" | "speaches";
 
 export type VoiceReplySynthesisRequest = {
   text: string;
@@ -8,10 +8,16 @@ export type VoiceReplySynthesisRequest = {
 };
 
 const ELEVENLABS_API_URL = "https://api.elevenlabs.io/v1/text-to-speech";
-const DEFAULT_VOICE_REPLY_PROVIDER: VoiceReplyProvider = "elevenlabs";
 const DEFAULT_ELEVENLABS_VOICE_ID = "21m00Tcm4TlvDq8ikWAM";
 const DEFAULT_ELEVENLABS_MODEL_ID =
   process.env.ELEVENLABS_MODEL_ID?.trim() || "eleven_flash_v2_5";
+
+// Speaches (OpenAI-compatible /v1/audio/speech) — local, on-LAN TTS. Selected
+// by VOICE_REPLY_PROVIDER=speaches; needs VOICE_TTS_BASE_URL to point at the
+// speaches service (e.g. http://10.10.0.35:8000). Model + default voice are
+// env-driven so the deployment owns them.
+const DEFAULT_SPEACHES_MODEL = "speaches-ai/piper-en_US-amy-medium";
+const DEFAULT_SPEACHES_VOICE = "amy";
 
 const normalizeVoiceSpeed = (value: number | null | undefined): number => {
   if (typeof value !== "number" || !Number.isFinite(value)) return 1;
@@ -29,7 +35,6 @@ const normalizeVoiceId = (value: string | null | undefined): string => {
 const synthesizeWithElevenLabs = async (
   request: VoiceReplySynthesisRequest
 ): Promise<Response> => {
-  // TODO: Create Claw3D voice and text skill.
   const apiKey = process.env.ELEVENLABS_API_KEY?.trim();
   if (!apiKey) {
     throw new Error("Missing ELEVENLABS_API_KEY.");
@@ -66,11 +71,53 @@ const synthesizeWithElevenLabs = async (
   return response;
 };
 
+const synthesizeWithSpeaches = async (
+  request: VoiceReplySynthesisRequest
+): Promise<Response> => {
+  const baseUrl = process.env.VOICE_TTS_BASE_URL?.trim();
+  if (!baseUrl) {
+    throw new Error("Missing VOICE_TTS_BASE_URL.");
+  }
+  const model = process.env.VOICE_TTS_MODEL?.trim() || DEFAULT_SPEACHES_MODEL;
+  // The voice picker in the UI lists ElevenLabs voice ids, which don't map to
+  // speaches voices, so use the deployment's configured voice rather than the
+  // per-agent ElevenLabs id.
+  const voice = process.env.VOICE_TTS_VOICE?.trim() || DEFAULT_SPEACHES_VOICE;
+  const response = await fetch(`${baseUrl.replace(/\/+$/, "")}/v1/audio/speech`, {
+    method: "POST",
+    headers: {
+      Accept: "audio/mpeg",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model,
+      input: request.text,
+      voice,
+      response_format: "mp3",
+    }),
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    const detail = (await response.text().catch(() => "")).trim();
+    throw new Error(detail || "Speaches voice synthesis failed.");
+  }
+  return response;
+};
+
 export const synthesizeVoiceReply = async (
   request: VoiceReplySynthesisRequest
 ): Promise<Response> => {
-  const provider = request.provider ?? DEFAULT_VOICE_REPLY_PROVIDER;
+  // The deployment chooses the backend via VOICE_REPLY_PROVIDER; this overrides
+  // the client-sent provider (the UI only knows "elevenlabs"). Falls back to the
+  // request provider, then elevenlabs.
+  const envProvider = process.env.VOICE_REPLY_PROVIDER?.trim();
+  const provider: VoiceReplyProvider =
+    envProvider === "speaches" || envProvider === "elevenlabs"
+      ? envProvider
+      : (request.provider ?? "elevenlabs");
   switch (provider) {
+    case "speaches":
+      return synthesizeWithSpeaches(request);
     case "elevenlabs":
       return synthesizeWithElevenLabs(request);
     default:

@@ -41,7 +41,11 @@ export async function POST(request: Request) {
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Failed to synthesize the voice reply.";
-    const status = message.includes("Missing ELEVENLABS_API_KEY") ? 503 : 500;
+    const status =
+      message.includes("Missing ELEVENLABS_API_KEY") ||
+      message.includes("Missing VOICE_TTS_BASE_URL")
+        ? 503
+        : 500;
     return NextResponse.json({ error: message }, { status });
   }
 }
