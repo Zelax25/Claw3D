@@ -5876,12 +5876,14 @@ export function RetroOffice3D({
         </div>
       ) : null}
 
-      {/* Standup + Kanban quick-access chips — top right, below the toolbar.
-          Kept out of the top-left column so they don't overlap the fixed
-          OfficeFloorNav (Building Directory / Current Floor) rail, which the
-          taller Standup card would otherwise grow down into during a meeting. */}
+      {/* Standup + Kanban quick-access chips — top right, below the toolbar and
+          left of the fixed HQSidebar rail (OPEN HQ / MARKETPLACE / ANALYTICS,
+          pinned to right-0). Kept out of the top-left column so they don't
+          overlap the OfficeFloorNav rail, which the taller Standup card would
+          otherwise grow down into during a meeting. The right-14 offset clears
+          the ~26px-wide vertical HQ tabs. */}
       {!readOnly && !immersiveOverlayActive && (standupMeeting || kanbanBoardItem) ? (
-        <div className="absolute top-14 right-3 z-20 flex flex-col items-end gap-2">
+        <div className="absolute top-14 right-14 z-20 flex flex-col items-end gap-2">
           {standupMeeting ? (
             <button
               type="button"
