@@ -7,7 +7,10 @@ import {
   loadGitHubDashboard,
   type GitHubPullRequestSummary,
 } from "@/lib/office/github";
-import { validateJiraBaseUrl } from "@/lib/security/urlSafety";
+import {
+  validateJiraBaseUrl,
+  validateOpenProjectBaseUrl,
+} from "@/lib/security/urlSafety";
 import type {
   StandupAgentSnapshot,
   StandupCommitSummary,
@@ -20,10 +23,13 @@ import type {
 } from "@/lib/office/standup/types";
 import { resolveStateDir } from "@/lib/clawdbot/paths";
 
-type JiraIssueRecord = StandupTicketSummary & {
+type SourceIssueRecord = StandupTicketSummary & {
   assigneeName: string | null;
   assigneeEmail: string | null;
 };
+
+type JiraIssueRecord = SourceIssueRecord;
+type OpenProjectIssueRecord = SourceIssueRecord;
 
 const OPENCLAW_CONFIG_FILENAME = "openclaw.json";
 
@@ -238,6 +244,131 @@ const loadJiraIssues = async (
   }
 };
 
+const buildOpenProjectSearchUrl = (
+  config: StandupConfig["openproject"],
+  baseUrl: string
+) => {
+  const filters: Array<Record<string, { operator: string; values: string[] }>> = [];
+  const projectId = coerceText(config.projectId);
+  if (projectId) {
+    filters.push({ project: { operator: "=", values: [projectId] } });
+  }
+  const versionId = coerceText(config.versionId);
+  if (versionId) {
+    filters.push({ version: { operator: "=", values: [versionId] } });
+  } else {
+    // No sprint pinned → fall back to all open work packages.
+    filters.push({ status: { operator: "o", values: [] } });
+  }
+  const url = new URL(`${baseUrl}/api/v3/work_packages`);
+  url.searchParams.set("pageSize", "50");
+  url.searchParams.set("filters", JSON.stringify(filters));
+  return url;
+};
+
+const loadOpenProjectIssues = async (
+  config: StandupConfig["openproject"]
+): Promise<{ issues: OpenProjectIssueRecord[]; sourceState: StandupSourceState }> => {
+  if (!config.enabled) {
+    return {
+      issues: [],
+      sourceState: buildSourceState("openproject", {
+        ready: false,
+        stale: true,
+        error: "OpenProject is disabled.",
+      }),
+    };
+  }
+  if (!config.baseUrl || !config.apiKey) {
+    return {
+      issues: [],
+      sourceState: buildSourceState("openproject", {
+        ready: false,
+        stale: true,
+        error: "OpenProject credentials are incomplete.",
+      }),
+    };
+  }
+  let opBaseUrl: string;
+  try {
+    opBaseUrl = validateOpenProjectBaseUrl(config.baseUrl);
+  } catch (error) {
+    return {
+      issues: [],
+      sourceState: buildSourceState("openproject", {
+        ready: false,
+        stale: true,
+        error:
+          error instanceof Error ? error.message : "OpenProject base URL is invalid.",
+      }),
+    };
+  }
+  const searchUrl = buildOpenProjectSearchUrl(config, opBaseUrl);
+  try {
+    // OpenProject API key auth = HTTP Basic with username "apikey".
+    const auth = Buffer.from(`apikey:${config.apiKey}`).toString("base64");
+    const response = await fetch(searchUrl, {
+      headers: {
+        Accept: "application/json",
+        Authorization: `Basic ${auth}`,
+      },
+      cache: "no-store",
+    });
+    const payload = (await response.json().catch(() => null)) as
+      | {
+          _embedded?: {
+            elements?: Array<{
+              id?: number;
+              subject?: string;
+              _links?: {
+                status?: { title?: string | null } | null;
+                assignee?: { title?: string | null } | null;
+              } | null;
+            }>;
+          };
+          message?: string;
+        }
+      | null;
+    if (!response.ok) {
+      throw new Error(payload?.message || "Failed to load OpenProject work packages.");
+    }
+    const issues: OpenProjectIssueRecord[] = (payload?._embedded?.elements ?? []).map(
+      (element) => {
+        const id = element.id != null ? String(element.id) : randomUUID();
+        return {
+          id,
+          key: element.id != null ? `#${element.id}` : "WP",
+          title: coerceText(element.subject) || "Untitled work package",
+          status: coerceText(element._links?.status?.title) || "Unknown",
+          url: element.id != null ? `${opBaseUrl}/work_packages/${element.id}` : null,
+          assigneeName: coerceText(element._links?.assignee?.title) || null,
+          // OP work-package collections expose assignee name but not email.
+          assigneeEmail: null,
+        };
+      }
+    );
+    return {
+      issues,
+      sourceState: buildSourceState("openproject", {
+        ready: true,
+        updatedAt: new Date().toISOString(),
+      }),
+    };
+  } catch (error) {
+    return {
+      issues: [],
+      sourceState: buildSourceState("openproject", {
+        ready: false,
+        stale: true,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to load OpenProject work packages.",
+      }),
+    };
+  }
+};
+
 const normalizeAgentSnapshots = (agents: StandupAgentSnapshot[]): StandupAgentSnapshot[] => {
   const valid = agents
     .map((agent) => ({
@@ -268,7 +399,7 @@ const normalizeAgentSnapshots = (agents: StandupAgentSnapshot[]): StandupAgentSn
 const selectAgentIssues = (
   agent: StandupAgentSnapshot,
   manualAssignee: string | null,
-  issues: JiraIssueRecord[]
+  issues: SourceIssueRecord[]
 ): StandupTicketSummary[] => {
   const nameHint = coerceText(manualAssignee) || coerceText(agent.name) || agent.agentId;
   const normalizedHint = nameHint.toLowerCase();
@@ -308,7 +439,14 @@ export const buildStandupMeeting = async (params: {
   scheduledFor?: string | null;
 }): Promise<StandupMeeting> => {
   const agents = normalizeAgentSnapshots(params.agents);
-  const [jiraResult] = await Promise.all([loadJiraIssues(params.config.jira)]);
+  const [jiraResult, openProjectResult] = await Promise.all([
+    loadJiraIssues(params.config.jira),
+    loadOpenProjectIssues(params.config.openproject),
+  ]);
+  const combinedIssues: SourceIssueRecord[] = [
+    ...jiraResult.issues,
+    ...openProjectResult.issues,
+  ];
   const githubResult = loadGitHubCommitSummaries();
   const cards: StandupSummaryCard[] = agents.map((agent) => {
     const manual = params.config.manualByAgentId[agent.agentId] ?? {
@@ -321,7 +459,7 @@ export const buildStandupMeeting = async (params: {
     const activeTickets = selectAgentIssues(
       agent,
       manual.jiraAssignee,
-      jiraResult.issues
+      combinedIssues
     );
     const currentTask =
       coerceText(manual.currentTask) ||
@@ -347,6 +485,7 @@ export const buildStandupMeeting = async (params: {
       sourceStates: [
         githubResult.sourceState,
         jiraResult.sourceState,
+        openProjectResult.sourceState,
         buildSourceState("manual", {
           ready: true,
           updatedAt: manual.updatedAt,

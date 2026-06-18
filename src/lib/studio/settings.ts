@@ -2,6 +2,7 @@ import type {
   StandupConfig,
   StandupJiraConfig,
   StandupManualEntry,
+  StandupOpenProjectConfig,
   StandupScheduleConfig,
 } from "@/lib/office/standup/types";
 import {
@@ -199,19 +200,32 @@ export type StudioAgentAvatars = Record<string, AgentAvatarProfile>;
 
 export type StudioStandupPreference = StandupConfig;
 
-export type StudioStandupPreferencePublic = Omit<StudioStandupPreference, "jira"> & {
+export type StudioStandupPreferencePublic = Omit<
+  StudioStandupPreference,
+  "jira" | "openproject"
+> & {
   jira: StandupJiraConfigPublic;
+  openproject: StandupOpenProjectConfigPublic;
 };
 
 export type StudioStandupPreferencePatch = {
   schedule?: Partial<StandupScheduleConfig>;
   jira?: Partial<StandupJiraConfig>;
+  openproject?: Partial<StandupOpenProjectConfig>;
   manualByAgentId?: Record<string, Partial<StandupManualEntry> | null>;
 };
 
 export type StandupJiraConfigPublic = Omit<StandupJiraConfig, "apiToken"> & {
   apiToken: string;
   apiTokenConfigured: boolean;
+};
+
+export type StandupOpenProjectConfigPublic = Omit<
+  StandupOpenProjectConfig,
+  "apiKey"
+> & {
+  apiKey: string;
+  apiKeyConfigured: boolean;
 };
 
 export type StudioTaskBoardPreference = TaskBoardPreference;
@@ -430,6 +444,14 @@ export const defaultStudioStandupJiraConfig = (): StandupJiraConfig => ({
   jql: "",
 });
 
+export const defaultStudioStandupOpenProjectConfig = (): StandupOpenProjectConfig => ({
+  enabled: false,
+  baseUrl: "",
+  apiKey: "",
+  projectId: "",
+  versionId: "",
+});
+
 export const defaultStudioStandupManualEntry = (): StandupManualEntry => ({
   jiraAssignee: null,
   currentTask: "",
@@ -441,6 +463,7 @@ export const defaultStudioStandupManualEntry = (): StandupManualEntry => ({
 export const defaultStudioStandupPreference = (): StudioStandupPreference => ({
   schedule: defaultStudioStandupScheduleConfig(),
   jira: defaultStudioStandupJiraConfig(),
+  openproject: defaultStudioStandupOpenProjectConfig(),
   manualByAgentId: {},
 });
 
@@ -703,6 +726,21 @@ const normalizeStandupJiraConfig = (
   };
 };
 
+const normalizeStandupOpenProjectConfig = (
+  value: unknown,
+  fallback: StandupOpenProjectConfig = defaultStudioStandupOpenProjectConfig()
+): StandupOpenProjectConfig => {
+  if (!isRecord(value)) return fallback;
+  const baseUrl = coerceString(value.baseUrl).replace(/\/+$/, "");
+  return {
+    enabled: typeof value.enabled === "boolean" ? value.enabled : fallback.enabled,
+    baseUrl: baseUrl || fallback.baseUrl,
+    apiKey: coerceString(value.apiKey) || fallback.apiKey,
+    projectId: coerceString(value.projectId) || fallback.projectId,
+    versionId: coerceString(value.versionId) || fallback.versionId,
+  };
+};
+
 const normalizeStandupManualEntry = (
   value: unknown,
   fallback: StandupManualEntry = defaultStudioStandupManualEntry()
@@ -736,6 +774,10 @@ const normalizeStandupPreference = (
   return {
     schedule: normalizeStandupScheduleConfig(value.schedule, fallback.schedule),
     jira: normalizeStandupJiraConfig(value.jira, fallback.jira),
+    openproject: normalizeStandupOpenProjectConfig(
+      value.openproject,
+      fallback.openproject
+    ),
     manualByAgentId,
   };
 };
@@ -1316,11 +1358,20 @@ export const sanitizeStandupJiraConfig = (
   apiTokenConfigured: value.apiToken.length > 0,
 });
 
+export const sanitizeStandupOpenProjectConfig = (
+  value: StandupOpenProjectConfig,
+): StandupOpenProjectConfigPublic => ({
+  ...value,
+  apiKey: "",
+  apiKeyConfigured: value.apiKey.length > 0,
+});
+
 export const sanitizeStandupPreference = (
   value: StudioStandupPreference,
 ): StudioStandupPreferencePublic => ({
   ...value,
   jira: sanitizeStandupJiraConfig(value.jira),
+  openproject: sanitizeStandupOpenProjectConfig(value.openproject),
 });
 
 export const sanitizeTaskBoardPreference = (

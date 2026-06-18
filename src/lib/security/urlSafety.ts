@@ -49,6 +49,25 @@ export const validateBrowserPreviewTarget = (value: string): URL => {
   return parsed;
 };
 
+export const validateOpenProjectBaseUrl = (value: string): string => {
+  const parsed = new URL(value);
+  if (parsed.protocol !== "https:") {
+    throw new Error("OpenProject base URL must use https.");
+  }
+  if (parsed.username || parsed.password) {
+    throw new Error("OpenProject base URL must not include embedded credentials.");
+  }
+  if (isPrivateOrLoopbackHostname(parsed.hostname)) {
+    throw new Error(
+      "OpenProject base URL must not target loopback or private-network hosts."
+    );
+  }
+  if (parsed.search || parsed.hash) {
+    throw new Error("OpenProject base URL must not include a query string or hash.");
+  }
+  return parsed.origin;
+};
+
 export const validateJiraBaseUrl = (value: string): string => {
   const parsed = new URL(value);
   if (parsed.protocol !== "https:") {
