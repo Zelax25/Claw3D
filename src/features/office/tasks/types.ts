@@ -15,6 +15,7 @@ export const TASK_BOARD_SOURCES = [
   "claw3d_manual",
   "playbook",
   "fallback_inferred",
+  "openproject",
 ] as const;
 
 export type TaskBoardSource = (typeof TASK_BOARD_SOURCES)[number];

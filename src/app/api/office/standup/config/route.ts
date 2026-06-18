@@ -9,7 +9,10 @@ import {
   sanitizeStandupPreference,
   type StudioStandupPreferencePatch,
 } from "@/lib/studio/settings";
-import { validateJiraBaseUrl } from "@/lib/security/urlSafety";
+import {
+  validateJiraBaseUrl,
+  validateOpenProjectBaseUrl,
+} from "@/lib/security/urlSafety";
 
 export const runtime = "nodejs";
 
@@ -56,6 +59,9 @@ export async function PUT(request: Request) {
     if (body.config.jira?.baseUrl?.trim()) {
       validateJiraBaseUrl(body.config.jira.baseUrl);
     }
+    if (body.config.openproject?.baseUrl?.trim()) {
+      validateOpenProjectBaseUrl(body.config.openproject.baseUrl);
+    }
     const settings = applyStudioSettingsPatch({
       standup: {
         [gatewayUrl]: body.config,
@@ -71,7 +77,8 @@ export async function PUT(request: Request) {
     const status =
       message.includes("gatewayUrl is required") ||
       message.includes("config is required") ||
-      message.includes("Jira base URL")
+      message.includes("Jira base URL") ||
+      message.includes("OpenProject base URL")
         ? 400
         : 500;
     return NextResponse.json({ error: message }, { status });

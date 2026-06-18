@@ -123,7 +123,7 @@ export function StandupImmersiveScreen({
                       <div className="mt-2 space-y-2">
                         {card.activeTickets.length === 0 ? (
                           <div className="font-mono text-[11px] text-white/35">
-                            No active Jira tickets.
+                            No active tickets.
                           </div>
                         ) : (
                           card.activeTickets.map((ticket) => (

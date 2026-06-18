@@ -1,6 +1,6 @@
 export type StandupPhase = "scheduled" | "gathering" | "in_progress" | "complete";
 
-export type StandupSourceKind = "github" | "jira" | "manual";
+export type StandupSourceKind = "github" | "jira" | "openproject" | "manual";
 
 export type StandupTriggerKind = "manual" | "scheduled";
 
@@ -84,6 +84,14 @@ export type StandupJiraConfig = {
   jql: string;
 };
 
+export type StandupOpenProjectConfig = {
+  enabled: boolean;
+  baseUrl: string;
+  apiKey: string;
+  projectId: string;
+  versionId: string;
+};
+
 export type StandupScheduleConfig = {
   enabled: boolean;
   cronExpr: string;
@@ -96,6 +104,7 @@ export type StandupScheduleConfig = {
 export type StandupConfig = {
   schedule: StandupScheduleConfig;
   jira: StandupJiraConfig;
+  openproject: StandupOpenProjectConfig;
   manualByAgentId: Record<string, StandupManualEntry>;
 };
 
